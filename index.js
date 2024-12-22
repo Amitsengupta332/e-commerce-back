@@ -98,10 +98,24 @@ const dbConnect = async () => {
       res.send(result);
     });
 
+    // my Products
+    app.get("/my-products", verifyJWT, verifySeller, async (req, res) => {
+      try {
+        const sellerEmail = req.decoded.email; // Extract seller's email from decoded token
+        const query = { sellerEmail: sellerEmail }; // Filter products by seller's email
+
+        const products = await productCollection.find(query).toArray(); // Fetch all products for this seller
+        res.send(products);
+      } catch (error) {
+        console.error("Error fetching my products:", error.message);
+        res.status(500).send({ message: "Failed to fetch products" });
+      }
+    });
+
     //gets prouducts
     app.get("/all-products", async (req, res) => {
       //name searching, sort by price, filter by category, filter by brand
-      const { title, sort, category, brand } = req.query;
+      const { title, sort, category, brand, page = 1, limit = 9 } = req.query;
 
       const query = {};
       if (title) {
@@ -117,13 +131,29 @@ const dbConnect = async () => {
         query.brand = brand;
       }
 
+      const pageNumber = Number(page);
+      const limitNumber = Number(limit);
+
       const sortOption = sort === "asc" ? 1 : -1;
       const products = await productCollection
         .find(query)
+        .skip((pageNumber - 1) * limitNumber)
+        .limit(limitNumber)
         .sort({ price: sortOption })
         .toArray();
 
-      res.json(products);
+      const totalProducts = await productCollection.countDocuments(query);
+
+      const productInfo = await productCollection
+        .find({}, { projection: { category: 1, brand: 1 } })
+        .toArray();
+
+      const brands = [...new Set(productInfo.map((product) => product.brand))];
+      const categories = [
+        ...new Set(productInfo.map((product) => product.category)),
+      ];
+
+      res.json({ products, brands, categories, totalProducts });
     });
   } catch (error) {
     console.log(error, error.name, error.message);
