@@ -28,6 +28,7 @@ const verifyJWT = (req, res, next) => {
     res.send({ message: "no token" });
   }
   const token = authorization.split(" ")[1];
+
   jwt.verify(token, process.env.ACCESS_KEY_TOKEN, (err, decoded) => {
     if (err) {
       res.send({ message: "invalid token" });
@@ -44,6 +45,18 @@ const verifySeller = async (req, res, next) => {
   const user = await userCollection.findOne(query);
   if (user?.role !== "seller") {
     return res.send({ message: "forbidden access." });
+  }
+  next();
+};
+
+// verify Admin
+const verifyAdmin = async (req, res, next) => {
+  const email = req.body.email;
+  const query = { email: email };
+  const user = await userCollection.findOne(query);
+
+  if (user?.role !== "admin") {
+    return res.status(403).send({ message: "Forbidden Access" });
   }
   next();
 };
@@ -76,6 +89,37 @@ const dbConnect = async () => {
       //   return res.send({ message: "no user found" });
       // }
       res.send(user);
+    });
+
+    //get all users
+    app.get("/users", verifyJWT, async (req, res) => {
+      const users = await userCollection.find({}).toArray();
+      res.send(users);
+    });
+
+    // Delete User by admin
+    app.delete("/users/:id", async (req, res) => {
+      const { id } = req.params;
+
+      const result = await userCollection.deleteOne({ _id: new ObjectId(id) });
+
+      if (result.deletedCount > 0) {
+        res.status(200).send({ message: "User deleted successfully." });
+      } else {
+        res.status(404).send({ message: "User not found." });
+      }
+    });
+
+    // Edit user Role By admin
+    app.patch("/users/:id", verifyJWT, async (req, res) => {
+      const { id } = req.params;
+      const { role } = req.body;
+      const updatedUser = await userCollection.findOneAndUpdate(
+        { _id: new ObjectId(id) },
+        { $set: { role } },
+        { returnDocument: "after" }
+      );
+      res.json(updatedUser.value);
     });
 
     // insert user
@@ -157,7 +201,6 @@ const dbConnect = async () => {
     });
 
     //add to wishlist
-    //patch
     app.patch("/wishlist/add", async (req, res) => {
       const { userEmail, productId } = req.body;
       const result = await userCollection.updateOne(
@@ -171,7 +214,6 @@ const dbConnect = async () => {
     });
 
     //get data from wishlist
-
     app.get("/wishlist/:userId", verifyJWT, async (req, res) => {
       const userId = req.params.userId;
       const user = await userCollection.findOne({
