@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 
 const app = express();
@@ -154,6 +154,53 @@ const dbConnect = async () => {
       ];
 
       res.json({ products, brands, categories, totalProducts });
+    });
+
+    //add to wishlist
+    //patch
+    app.patch("/wishlist/add", async (req, res) => {
+      const { userEmail, productId } = req.body;
+      const result = await userCollection.updateOne(
+        {
+          email: userEmail,
+        },
+        { $addToSet: { wishlist: new ObjectId(String(productId)) } }
+      );
+
+      res.send(result);
+    });
+
+    //get data from wishlist
+
+    app.get("/wishlist/:userId", verifyJWT, async (req, res) => {
+      const userId = req.params.userId;
+      const user = await userCollection.findOne({
+        _id: new ObjectId(String(userId)),
+      });
+      if (!user) {
+        return res.send({ message: "User not Found!" });
+      }
+
+      const wishlist = await productCollection
+        .find({
+          _id: { $in: user.wishlist || [] },
+        })
+        .toArray();
+
+      res.send(wishlist);
+    });
+
+    //remove from wishlist
+    app.patch("/wishlist/remove", async (req, res) => {
+      const { userEmail, productId } = req.body;
+      const result = await userCollection.updateOne(
+        {
+          email: userEmail,
+        },
+        { $pull: { wishlist: new ObjectId(String(productId)) } }
+      );
+
+      res.send(result);
     });
   } catch (error) {
     console.log(error, error.name, error.message);
